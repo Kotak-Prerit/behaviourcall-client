@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axiosInstance from '../utils/axiosInstance';
 import socketService from '../utils/socketService';
@@ -7,6 +7,7 @@ import GlassCard from '../components/ui/GlassCard';
 import BlurText from '../components/ui/BlurText';
 import ShinyButton from '../components/ui/ShinyButton';
 import { motion } from 'framer-motion';
+import confetti from 'canvas-confetti';
 
 function PredictionPage() {
   const { roundId } = useParams();
@@ -17,6 +18,10 @@ function PredictionPage() {
   const [predictionText, setPredictionText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasSubmitted, setHasSubmitted] = useState(false);
+  const [timeRemaining, setTimeRemaining] = useState(600); // 10 minutes in seconds
+  const [hasHappened, setHasHappened] = useState(false);
+  const [score, setScore] = useState(0);
+  const timerRef = useRef(null);
 
   useEffect(() => {
     const storedPlayerId = localStorage.getItem('playerId');
@@ -42,8 +47,32 @@ function PredictionPage() {
     return () => {
       socketService.off('phase-updated');
       socketService.off('player-prediction-submitted');
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
     };
   }, [roundId, navigate]);
+
+  // Timer countdown effect
+  useEffect(() => {
+    if (hasSubmitted && !hasHappened) {
+      timerRef.current = setInterval(() => {
+        setTimeRemaining((prev) => {
+          if (prev <= 1) {
+            clearInterval(timerRef.current);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      return () => {
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+        }
+      };
+    }
+  }, [hasSubmitted, hasHappened]);
 
   const fetchRound = async (storedPlayerId) => {
     try {
@@ -87,11 +116,10 @@ function PredictionPage() {
 
       console.log('Prediction response:', response.data);
       setHasSubmitted(true);
+      setTimeRemaining(600); // Reset timer to 10 minutes
       
       const roomResponse = await axiosInstance.get(`/rooms/${round.roomId}`);
       socketService.submitPrediction(roomResponse.data.code, playerId);
-
-      alert('Prediction submitted! Waiting for others...');
     } catch (error) {
       console.error('Error submitting prediction:', error);
       console.error('Error details:', error.response?.data);
@@ -100,6 +128,50 @@ function PredictionPage() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleItHappened = () => {
+    if (hasHappened || timeRemaining <= 0) return;
+
+    setHasHappened(true);
+    setScore(10);
+    
+    // Trigger confetti
+    const duration = 3000;
+    const end = Date.now() + duration;
+
+    const frame = () => {
+      confetti({
+        particleCount: 5,
+        angle: 60,
+        spread: 55,
+        origin: { x: 0 },
+        colors: ['#59BE4C', '#ffffff', '#000000']
+      });
+      confetti({
+        particleCount: 5,
+        angle: 120,
+        spread: 55,
+        origin: { x: 1 },
+        colors: ['#59BE4C', '#ffffff', '#000000']
+      });
+
+      if (Date.now() < end) {
+        requestAnimationFrame(frame);
+      }
+    };
+    frame();
+
+    // Clear the timer
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+  };
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   if (!round || !targetPlayer) {
@@ -129,7 +201,7 @@ function PredictionPage() {
             <h2 className="text-xl font-bold text-center mb-2 text-white/80">Your Target:</h2>
             <BlurText 
               text={targetPlayer.name} 
-              className="text-4xl font-bold text-center text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400" 
+              className="text-4xl font-bold text-white text-center text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400"
             />
           </motion.div>
 
@@ -139,10 +211,58 @@ function PredictionPage() {
               animate={{ opacity: 1, y: 0 }}
               className="text-center"
             >
-              <div className="bg-green-500/20 border border-green-500/50 rounded-xl p-6 mb-4">
+              <div className="bg-green-500/20 border border-green-500/50 rounded-xl p-6 mb-8">
                 <p className="text-xl font-semibold text-green-400">✓ Prediction Submitted!</p>
               </div>
-              <p className="text-white/60 animate-pulse">Waiting for other players to submit their predictions...</p>
+
+              {/* Timer Button */}
+              <div className="flex flex-col items-center gap-4">
+                <motion.button
+                  onClick={handleItHappened}
+                  disabled={timeRemaining <= 0 || hasHappened}
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  whileHover={{ scale: hasHappened ? 1 : 1.05 }}
+                  whileTap={{ scale: hasHappened ? 1 : 0.95 }}
+                  className={`relative w-64 h-64 rounded-full font-bold text-2xl transition-all duration-500 shadow-2xl ${
+                    hasHappened
+                      ? 'bg-green-500 text-white cursor-default'
+                      : timeRemaining > 0
+                      ? 'bg-red-500 text-white hover:shadow-red-500/50 cursor-pointer'
+                      : 'bg-gray-500 text-gray-300 cursor-not-allowed'
+                  }`}
+                  style={{
+                    boxShadow: hasHappened
+                      ? '0 0 60px rgba(89, 190, 76, 0.8)'
+                      : '0 0 60px rgba(239, 68, 68, 0.6)'
+                  }}
+                >
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    {hasHappened ? (
+                      <>
+                        <span className="text-4xl mb-2">✓</span>
+                        <span className="text-3xl">It Happened!</span>
+                        <span className="text-6xl font-bold mt-2">+{score}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-5xl font-bold mb-2">{formatTime(timeRemaining)}</span>
+                        <span className="text-xl">It Happened</span>
+                      </>
+                    )}
+                  </div>
+                </motion.button>
+
+                {!hasHappened && timeRemaining > 0 && (
+                  <p className="text-white/60 text-sm">
+                    Click the button when your prediction happens!
+                  </p>
+                )}
+
+                {timeRemaining <= 0 && !hasHappened && (
+                  <p className="text-red-400 font-semibold">Time's up! Your prediction didn't happen.</p>
+                )}
+              </div>
             </motion.div>
           ) : (
             <form onSubmit={handleSubmitPrediction}>
