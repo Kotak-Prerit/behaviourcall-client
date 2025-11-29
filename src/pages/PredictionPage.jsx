@@ -22,6 +22,9 @@ function PredictionPage() {
     const storedPlayerId = localStorage.getItem('playerId');
     setPlayerId(storedPlayerId);
 
+    // Connect socket
+    socketService.connect();
+
     if (storedPlayerId) {
       fetchRound(storedPlayerId);
     }

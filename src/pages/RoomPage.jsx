@@ -29,6 +29,9 @@ function RoomPage() {
       return;
     }
     
+    // Connect socket
+    socketService.connect();
+    
     setPlayerId(storedPlayerId);
     joinAndFetchRoom(storedPlayerId);
 
@@ -138,8 +141,8 @@ function RoomPage() {
         playerId,
         isReady: newReadyStatus
       });
-      socketService.updateReady(code, playerId, newReadyStatus);
-      setIsReady(newReadyStatus);
+      // Don't call socketService.updateReady - backend will emit room-updated event
+      // Don't set isReady here - wait for the room-updated socket event
       toast.success(newReadyStatus ? 'You are ready!' : 'Marked as not ready');
     } catch (error) {
       console.error('Error updating ready status:', error);
@@ -249,7 +252,7 @@ function RoomPage() {
                 onClick={handleLeaveRoom}
                 className="bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30"
               >
-                <FiLogOut className="mr-2" />
+                <FiLogOut />
               </Button>
             </div>
           </div>
@@ -337,12 +340,12 @@ function RoomPage() {
                     onClick={handleToggleReady}
                     className={`w-full ${
                       isReady
-                        ? 'bg-white/10 text-white border border-white/20 hover:bg-white/20'
-                        : 'bg-primary text-black hover:bg-primary/90'
+                        ? 'bg-white/10 text-white border border-white hover:bg-white/20'
+                        : 'bg-primary text-white hover:bg-primary/90'
                     }`}
                   >
                     <FiUser className="mr-2" />
-                    {isReady ? "Mark Not Ready" : "I'm Ready"}
+                    {isReady ? "Ready" : "I'm Ready"}
                   </Button>
                 </CardContent>
               </Card>
@@ -359,7 +362,7 @@ function RoomPage() {
                     <Button
                       onClick={handleStartGame}
                       disabled={!canStart || isStarting}
-                      className="w-full bg-primary text-black hover:bg-primary/90 disabled:opacity-50"
+                      className="w-full bg-primary text-white border border-white hover:bg-primary/90 disabled:opacity-50"
                     >
                       <FiPlay className="mr-2" />
                       {isStarting ? 'Starting...' : 'Start Game'}
