@@ -25,8 +25,7 @@ function RoomPage() {
     setPlayerId(storedPlayerId);
 
     if (storedPlayerId) {
-      fetchRoom();
-      socketService.joinRoom(storedPlayerId, code);
+      joinAndFetchRoom(storedPlayerId);
     }
 
     socketService.on('room-updated', (updatedRoom) => {
@@ -56,6 +55,47 @@ function RoomPage() {
       socketService.off('room-error');
     };
   }, [code, navigate]);
+
+  const joinAndFetchRoom = async (storedPlayerId) => {
+    try {
+      // First try to join the room
+      try {
+        const joinResponse = await axiosInstance.post(`/rooms/${code}/join`, {
+          playerId: storedPlayerId
+        });
+        setRoom(joinResponse.data);
+        
+        const currentPlayer = joinResponse.data.players.find(p => p.playerId._id === storedPlayerId);
+        if (currentPlayer) {
+          setIsReady(currentPlayer.isReady);
+        }
+        
+        // Join socket room
+        socketService.joinRoom(storedPlayerId, code);
+        toast.success('Joined room!');
+      } catch (joinError) {
+        // If already in room (400), just fetch the room data
+        if (joinError.response?.status === 400) {
+          const response = await axiosInstance.get(`/rooms/${code}`);
+          setRoom(response.data);
+          
+          const currentPlayer = response.data.players.find(p => p.playerId._id === storedPlayerId);
+          if (currentPlayer) {
+            setIsReady(currentPlayer.isReady);
+          }
+          
+          // Join socket room
+          socketService.joinRoom(storedPlayerId, code);
+        } else {
+          throw joinError;
+        }
+      }
+    } catch (error) {
+      console.error('Error joining room:', error);
+      toast.error('Failed to join room');
+      navigate('/');
+    }
+  };
 
   const fetchRoom = async () => {
     try {
@@ -180,12 +220,11 @@ function RoomPage() {
                 <Separator orientation="vertical" className="h-6 bg-white/10" />
                 <div>
                   <div className="flex items-center gap-2">
-                    <h1 className="text-2xl font-bold">Room: {code}</h1>
                     <Button
                       variant="ghost"
                       size="icon"
                       onClick={handleCopyCode}
-                      className="hover:bg-white/5"
+                      className="hover:bg-white/5 bg-white/10 p-2 rounded-md"
                     >
                       {copied ? <FiCheck className="text-green-500" /> : <FiCopy />}
                     </Button>
@@ -200,7 +239,6 @@ function RoomPage() {
                 className="bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30"
               >
                 <FiLogOut className="mr-2" />
-                Leave Room
               </Button>
             </div>
           </div>
