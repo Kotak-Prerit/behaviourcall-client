@@ -75,13 +75,14 @@ function PredictionPage() {
 
     setIsSubmitting(true);
     try {
-      await axiosInstance.post('/predictions', {
+      const response = await axiosInstance.post('/predictions', {
         roundId,
         predictorId: playerId,
         targetId: targetPlayer._id,
         text: predictionText
       });
 
+      console.log('Prediction response:', response.data);
       setHasSubmitted(true);
       
       const roomResponse = await axiosInstance.get(`/rooms/${round.roomId}`);
@@ -90,7 +91,9 @@ function PredictionPage() {
       alert('Prediction submitted! Waiting for others...');
     } catch (error) {
       console.error('Error submitting prediction:', error);
-      alert('Failed to submit prediction');
+      console.error('Error details:', error.response?.data);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to submit prediction';
+      alert(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
