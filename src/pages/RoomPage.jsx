@@ -22,37 +22,47 @@ function RoomPage() {
 
   useEffect(() => {
     const storedPlayerId = localStorage.getItem('playerId');
-    setPlayerId(storedPlayerId);
-
-    if (storedPlayerId) {
-      joinAndFetchRoom(storedPlayerId);
+    
+    if (!storedPlayerId) {
+      toast.error('Please login first');
+      navigate('/');
+      return;
     }
+    
+    setPlayerId(storedPlayerId);
+    joinAndFetchRoom(storedPlayerId);
 
-    socketService.on('room-updated', (updatedRoom) => {
+    const handleRoomUpdated = (updatedRoom) => {
+      console.log('Room updated:', updatedRoom);
       setRoom(updatedRoom);
       const currentPlayer = updatedRoom.players.find(p => p.playerId._id === storedPlayerId);
       if (currentPlayer) {
         setIsReady(currentPlayer.isReady);
       }
-    });
+    };
 
-    socketService.on('all-players-ready', () => {
+    const handleAllReady = () => {
       toast.success('All players are ready!');
-    });
+    };
 
-    socketService.on('round-started', ({ roundId }) => {
+    const handleRoundStarted = ({ roundId }) => {
       navigate(`/prediction/${roundId}`);
-    });
+    };
 
-    socketService.on('room-error', (error) => {
+    const handleRoomError = (error) => {
       toast.error(error.message);
-    });
+    };
+
+    socketService.on('room-updated', handleRoomUpdated);
+    socketService.on('all-players-ready', handleAllReady);
+    socketService.on('round-started', handleRoundStarted);
+    socketService.on('room-error', handleRoomError);
 
     return () => {
-      socketService.off('room-updated');
-      socketService.off('all-players-ready');
-      socketService.off('round-started');
-      socketService.off('room-error');
+      socketService.off('room-updated', handleRoomUpdated);
+      socketService.off('all-players-ready', handleAllReady);
+      socketService.off('round-started', handleRoundStarted);
+      socketService.off('room-error', handleRoomError);
     };
   }, [code, navigate]);
 
@@ -70,12 +80,12 @@ function RoomPage() {
           setIsReady(currentPlayer.isReady);
         }
         
-        // Join socket room
+        // Join socket room and notify others
         socketService.joinRoom(storedPlayerId, code);
         toast.success('Joined room!');
       } catch (joinError) {
         // If already in room (400), just fetch the room data
-        if (joinError.response?.status === 400) {
+        if (joinError.response?.status === 400 && joinError.response?.data?.message?.includes('already in room')) {
           const response = await axiosInstance.get(`/rooms/${code}`);
           setRoom(response.data);
           
@@ -92,7 +102,7 @@ function RoomPage() {
       }
     } catch (error) {
       console.error('Error joining room:', error);
-      toast.error('Failed to join room');
+      toast.error(error.response?.data?.message || 'Failed to join room');
       navigate('/');
     }
   };
@@ -220,11 +230,12 @@ function RoomPage() {
                 <Separator orientation="vertical" className="h-6 bg-white/10" />
                 <div>
                   <div className="flex items-center gap-2">
+                    <h1 className="text-2xl font-bold">{code}</h1>
                     <Button
                       variant="ghost"
                       size="icon"
                       onClick={handleCopyCode}
-                      className="hover:bg-white/5 bg-white/10 p-2 rounded-md"
+                      className="hover:bg-white/5"
                     >
                       {copied ? <FiCheck className="text-green-500" /> : <FiCopy />}
                     </Button>
