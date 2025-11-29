@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { toast } from 'sonner';
+import { FiCopy, FiCheck, FiLogOut, FiPlay, FiUsers, FiUser } from 'react-icons/fi';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import axiosInstance from '../utils/axiosInstance';
 import socketService from '../utils/socketService';
-import AnimatedBackground from '../components/ui/AnimatedBackground';
-import GlassCard from '../components/ui/GlassCard';
-import BlurText from '../components/ui/BlurText';
-import ShinyButton from '../components/ui/ShinyButton';
-import { motion } from 'framer-motion';
 
 function RoomPage() {
   const { code } = useParams();
@@ -15,6 +18,7 @@ function RoomPage() {
   const [playerId, setPlayerId] = useState(null);
   const [isReady, setIsReady] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const storedPlayerId = localStorage.getItem('playerId');
@@ -34,7 +38,7 @@ function RoomPage() {
     });
 
     socketService.on('all-players-ready', () => {
-      console.log('All players are ready!');
+      toast.success('All players are ready!');
     });
 
     socketService.on('round-started', ({ roundId }) => {
@@ -42,7 +46,7 @@ function RoomPage() {
     });
 
     socketService.on('room-error', (error) => {
-      alert(error.message);
+      toast.error(error.message);
     });
 
     return () => {
@@ -65,9 +69,16 @@ function RoomPage() {
       }
     } catch (error) {
       console.error('Error fetching room:', error);
-      alert('Room not found');
+      toast.error('Room not found');
       navigate('/');
     }
+  };
+
+  const handleCopyCode = async () => {
+    await navigator.clipboard.writeText(code);
+    setCopied(true);
+    toast.success('Room code copied!');
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const handleToggleReady = async () => {
@@ -79,20 +90,22 @@ function RoomPage() {
       });
       socketService.updateReady(code, playerId, newReadyStatus);
       setIsReady(newReadyStatus);
+      toast.success(newReadyStatus ? 'You are ready!' : 'Marked as not ready');
     } catch (error) {
       console.error('Error updating ready status:', error);
+      toast.error('Failed to update status');
     }
   };
 
   const handleStartGame = async () => {
     if (!room || room.players.length < 2) {
-      alert('Need at least 2 players to start');
+      toast.error('Need at least 2 players to start');
       return;
     }
 
     const allReady = room.players.every(p => p.isReady);
     if (!allReady) {
-      alert('All players must be ready');
+      toast.error('All players must be ready');
       return;
     }
 
@@ -102,10 +115,11 @@ function RoomPage() {
       const round = response.data;
       
       socketService.startRound(code, round._id);
+      toast.success('Game starting!');
       navigate(`/prediction/${round._id}`);
     } catch (error) {
       console.error('Error starting game:', error);
-      alert('Failed to start game');
+      toast.error('Failed to start game');
     } finally {
       setIsStarting(false);
     }
@@ -115,17 +129,24 @@ function RoomPage() {
     try {
       await axiosInstance.post(`/rooms/${code}/leave`, { playerId });
       socketService.leaveRoom(playerId, code);
+      toast.success('Left room');
       navigate('/');
     } catch (error) {
       console.error('Error leaving room:', error);
+      toast.error('Failed to leave room');
     }
   };
 
   if (!room) {
     return (
-      <div className="min-h-screen flex items-center justify-center relative">
-        <AnimatedBackground />
-        <div className="text-white text-2xl animate-pulse">Loading room...</div>
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="text-white text-xl"
+        >
+          Loading room...
+        </motion.div>
       </div>
     );
   }
@@ -135,94 +156,203 @@ function RoomPage() {
   const canStart = isHost && allReady && room.players.length >= 2;
 
   return (
-    <div className="min-h-screen p-4 relative">
-      <AnimatedBackground />
-      <div className="max-w-4xl mx-auto pt-10">
-        <GlassCard>
-          <div className="flex justify-between items-center mb-8">
-            <div>
-              <BlurText text={`Room: ${room.code}`} className="text-3xl font-bold text-white" />
-              <p className="text-white/70 mt-1">Host: {room.hostId.name}</p>
-            </div>
-            <ShinyButton
-              onClick={handleLeaveRoom}
-              className="bg-red-500/80 hover:bg-red-600/80"
-            >
-              Leave Room
-            </ShinyButton>
-          </div>
-
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold mb-4 text-white">Players ({room.players.length})</h2>
-            <div className="grid gap-3">
-              {room.players.map((player, idx) => (
-                <motion.div
-                  key={player.playerId._id}
-                  initial={{ x: -20, opacity: 0 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  transition={{ delay: idx * 0.1 }}
-                  className={`p-4 rounded-xl flex justify-between items-center backdrop-blur-sm border transition-all ${
-                    player.playerId._id === playerId
-                      ? 'bg-purple-500/20 border-purple-500/50'
-                      : 'bg-white/5 border-white/10'
-                  }`}
+    <div className="min-h-screen bg-black text-white">
+      {/* Grid Background */}
+      <div className="fixed inset-0 bg-[linear-gradient(to_right,#111_1px,transparent_1px),linear-gradient(to_bottom,#111_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000_70%,transparent_110%)]" />
+      
+      <div className="relative z-10">
+        {/* Header */}
+        <motion.header
+          initial={{ y: -100 }}
+          animate={{ y: 0 }}
+          className="border-b border-white/10 backdrop-blur-xl bg-black/50"
+        >
+          <div className="container mx-auto px-4 py-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <Button
+                  variant="ghost"
+                  onClick={() => navigate('/')}
+                  className="text-white/60 hover:text-white hover:bg-white/5"
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="font-medium text-white">{player.playerId.name}</span>
-                    {room.hostId._id === player.playerId._id && (
-                      <span className="bg-yellow-500 text-black text-xs px-2 py-1 rounded font-bold">HOST</span>
-                    )}
+                  ← Back
+                </Button>
+                <Separator orientation="vertical" className="h-6 bg-white/10" />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-2xl font-bold">Room: {code}</h1>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleCopyCode}
+                      className="hover:bg-white/5"
+                    >
+                      {copied ? <FiCheck className="text-green-500" /> : <FiCopy />}
+                    </Button>
                   </div>
-                  <div>
-                    {player.isReady ? (
-                      <span className="bg-green-500 text-white px-3 py-1 rounded-full text-sm font-semibold shadow-[0_0_10px_rgba(34,197,94,0.5)]">
-                        Ready
-                      </span>
-                    ) : (
-                      <span className="bg-white/20 text-white px-3 py-1 rounded-full text-sm font-semibold">
-                        Not Ready
-                      </span>
-                    )}
-                  </div>
-                </motion.div>
-              ))}
+                  <p className="text-white/60 text-sm">Host: {room.hostId.name}</p>
+                </div>
+              </div>
+              
+              <Button
+                variant="destructive"
+                onClick={handleLeaveRoom}
+                className="bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30"
+              >
+                <FiLogOut className="mr-2" />
+                Leave Room
+              </Button>
             </div>
           </div>
+        </motion.header>
 
-          <div className="space-y-4">
-            <ShinyButton
-              onClick={handleToggleReady}
-              className={`w-full ${
-                isReady
-                  ? 'bg-white/20 hover:bg-white/30'
-                  : 'bg-gradient-to-r from-green-500 to-emerald-600'
-              }`}
-            >
-              {isReady ? "I'm Not Ready" : "I'm Ready"}
-            </ShinyButton>
+        {/* Main Content */}
+        <div className="container mx-auto px-4 py-12">
+          <div className="grid lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
+            {/* Players List */}
+            <div className="lg:col-span-2">
+              <Card className="border-white/10 bg-white/5 backdrop-blur-xl">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <FiUsers />
+                    Players ({room.players.length})
+                  </CardTitle>
+                  <CardDescription className="text-white/60">
+                    {allReady ? 'Everyone is ready! 🎉' : 'Waiting for players to get ready...'}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {room.players.map((player, index) => (
+                      <motion.div
+                        key={player.playerId._id}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.1 }}
+                      >
+                        <div className={`flex items-center gap-4 p-4 rounded-lg border transition-all ${
+                          player.playerId._id === playerId
+                            ? 'bg-primary/10 border-primary/30'
+                            : 'bg-white/5 border-white/10 hover:bg-white/10'
+                        }`}>
+                          <Avatar className="h-12 w-12 border border-white/20">
+                            <AvatarFallback className="bg-white/10 text-white text-lg">
+                              {player.playerId.name.charAt(0).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="font-semibold truncate">{player.playerId.name}</p>
+                              {room.hostId._id === player.playerId._id && (
+                                <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">
+                                  HOST
+                                </Badge>
+                              )}
+                              {player.playerId._id === playerId && (
+                                <Badge variant="outline" className="border-white/20 text-white/60">
+                                  You
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                          
+                          <div>
+                            {player.isReady ? (
+                              <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
+                                Ready ✓
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="border-white/20 text-white/60">
+                                Not Ready
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        {index < room.players.length - 1 && <Separator className="bg-white/5" />}
+                      </motion.div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
 
-            {isHost && (
-              <ShinyButton
-                onClick={handleStartGame}
-                disabled={!canStart || isStarting}
-                className="w-full bg-gradient-to-r from-purple-600 to-pink-600"
-              >
-                {isStarting ? 'Starting...' : 'Start Game'}
-              </ShinyButton>
-            )}
+            {/* Actions Panel */}
+            <div className="space-y-4">
+              <Card className="border-white/10 bg-white/5 backdrop-blur-xl">
+                <CardHeader>
+                  <CardTitle>Ready Status</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <Button
+                    onClick={handleToggleReady}
+                    className={`w-full ${
+                      isReady
+                        ? 'bg-white/10 text-white border border-white/20 hover:bg-white/20'
+                        : 'bg-primary text-black hover:bg-primary/90'
+                    }`}
+                  >
+                    <FiUser className="mr-2" />
+                    {isReady ? "Mark Not Ready" : "I'm Ready"}
+                  </Button>
+                </CardContent>
+              </Card>
 
-            {!allReady && room.players.length >= 2 && (
-              <p className="text-center text-white/60 text-sm animate-pulse">
-                Waiting for all players to be ready...
-              </p>
-            )}
-            {room.players.length < 2 && (
-              <p className="text-center text-white/60 text-sm">
-                Need at least 2 players to start
-              </p>
-            )}
+              {isHost && (
+                <Card className="border-white/10 bg-white/5 backdrop-blur-xl">
+                  <CardHeader>
+                    <CardTitle>Host Controls</CardTitle>
+                    <CardDescription className="text-white/60">
+                      Start the game when everyone is ready
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <Button
+                      onClick={handleStartGame}
+                      disabled={!canStart || isStarting}
+                      className="w-full bg-primary text-black hover:bg-primary/90 disabled:opacity-50"
+                    >
+                      <FiPlay className="mr-2" />
+                      {isStarting ? 'Starting...' : 'Start Game'}
+                    </Button>
+                    
+                    {!canStart && (
+                      <p className="text-sm text-white/60 text-center">
+                        {room.players.length < 2 
+                          ? 'Need at least 2 players' 
+                          : 'All players must be ready'}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              <Card className="border-white/10 bg-white/5 backdrop-blur-xl">
+                <CardHeader>
+                  <CardTitle>Game Info</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-white/60">Players:</span>
+                    <span className="font-semibold">{room.players.length}</span>
+                  </div>
+                  <Separator className="bg-white/5" />
+                  <div className="flex justify-between">
+                    <span className="text-white/60">Ready:</span>
+                    <span className="font-semibold text-green-400">
+                      {room.players.filter(p => p.isReady).length}/{room.players.length}
+                    </span>
+                  </div>
+                  <Separator className="bg-white/5" />
+                  <div className="flex justify-between">
+                    <span className="text-white/60">Status:</span>
+                    <span className="font-semibold">{room.status}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </div>
-        </GlassCard>
+        </div>
       </div>
     </div>
   );

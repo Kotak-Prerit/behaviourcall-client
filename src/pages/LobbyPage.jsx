@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
 import { FiUser, FiLogOut, FiUsers, FiArrowRight, FiPlus, FiLogIn } from 'react-icons/fi';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -50,7 +51,7 @@ function LobbyPage() {
       setName('');
       fetchAllPlayers();
     } catch (error) {
-      alert('Failed to login');
+      toast.error('Failed to login');
     }
   };
 
@@ -61,7 +62,7 @@ function LobbyPage() {
 
   const handleCreateRoom = async () => {
     if (!currentUser) {
-      alert('Please login first');
+      toast.error('Please login first');
       return;
     }
 
@@ -71,7 +72,7 @@ function LobbyPage() {
       });
       navigate(`/room/${response.data.code}`);
     } catch (error) {
-      alert('Failed to create room');
+      toast.error('Failed to create room');
     }
   };
 
@@ -79,15 +80,16 @@ function LobbyPage() {
     e.preventDefault();
     if (!roomCode.trim()) return;
     if (!currentUser) {
-      alert('Please login first');
+      toast.error('Please login first');
       return;
     }
 
     try {
-      await axiosInstance.get(`/rooms/code/${roomCode}`);
+      await axiosInstance.get(`/rooms/${roomCode}`);
       navigate(`/room/${roomCode}`);
+      toast.success('Joined room successfully!');
     } catch (error) {
-      alert('Room not found');
+      toast.error('Room not found');
     }
   };
 
