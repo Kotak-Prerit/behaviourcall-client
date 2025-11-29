@@ -21,6 +21,9 @@ function PredictionPage() {
   const [timeRemaining, setTimeRemaining] = useState(600); // 10 minutes in seconds
   const [hasHappened, setHasHappened] = useState(false);
   const [score, setScore] = useState(0);
+  const [isWinner, setIsWinner] = useState(null); // null, true, or false
+  const [showResult, setShowResult] = useState(false);
+  const [resultImage, setResultImage] = useState('');
   const timerRef = useRef(null);
 
   useEffect(() => {
@@ -44,9 +47,38 @@ function PredictionPage() {
       // Could show who has submitted
     });
 
+    socketService.on('round-won', ({ winnerId, winnerName }) => {
+      const storedPlayerId = localStorage.getItem('playerId');
+      if (winnerId === storedPlayerId) {
+        // This player won
+        setIsWinner(true);
+        setShowResult(true);
+        setResultImage('/winner.gif');
+        
+        // Show winner image for 5 seconds
+        setTimeout(() => {
+          setShowResult(false);
+        }, 5000);
+      } else {
+        // This player lost
+        setIsWinner(false);
+        setShowResult(true);
+        
+        // Show donkey for 3 seconds, then dogass for 3 seconds
+        setResultImage('/donkey.webp');
+        setTimeout(() => {
+          setResultImage('/dogass.webp');
+          setTimeout(() => {
+            setShowResult(false);
+          }, 3000);
+        }, 3000);
+      }
+    });
+
     return () => {
       socketService.off('phase-updated');
       socketService.off('player-prediction-submitted');
+      socketService.off('round-won');
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
@@ -118,8 +150,10 @@ function PredictionPage() {
       setHasSubmitted(true);
       setTimeRemaining(600); // Reset timer to 10 minutes
       
-      const roomResponse = await axiosInstance.get(`/rooms/${round.roomId}`);
-      socketService.submitPrediction(roomResponse.data.code, playerId);
+      // Use the populated roomId.code from the round data
+      if (round.roomId && round.roomId.code) {
+        socketService.submitPrediction(round.roomId.code, playerId);
+      }
     } catch (error) {
       console.error('Error submitting prediction:', error);
       console.error('Error details:', error.response?.data);
@@ -130,41 +164,79 @@ function PredictionPage() {
     }
   };
 
-  const handleItHappened = () => {
-    if (hasHappened || timeRemaining <= 0) return;
+  const handleItHappened = async () => {
+    if (hasHappened || timeRemaining <= 0 || !round || !playerId) return;
 
-    setHasHappened(true);
-    setScore(10);
-    
-    // Trigger confetti
-    const duration = 3000;
-    const end = Date.now() + duration;
+    try {
+      // Fetch the prediction first
+      const predictionResponse = await axiosInstance.get(
+        `/predictions/round/${roundId}/player/${playerId}`
+      );
+      const prediction = predictionResponse.data;
 
-    const frame = () => {
-      confetti({
-        particleCount: 5,
-        angle: 60,
-        spread: 55,
-        origin: { x: 0 },
-        colors: ['#59BE4C', '#ffffff', '#000000']
-      });
-      confetti({
-        particleCount: 5,
-        angle: 120,
-        spread: 55,
-        origin: { x: 1 },
-        colors: ['#59BE4C', '#ffffff', '#000000']
-      });
+      // Mark as happened
+      const response = await axiosInstance.put(`/predictions/${prediction._id}/happened`);
+      
+      if (response.data.isWinner) {
+        // This player won!
+        setHasHappened(true);
+        setScore(10);
+        setIsWinner(true);
+        setShowResult(true);
+        setResultImage('/winner.gif');
+        
+        // Trigger confetti
+        const duration = 3000;
+        const end = Date.now() + duration;
 
-      if (Date.now() < end) {
-        requestAnimationFrame(frame);
+        const frame = () => {
+          confetti({
+            particleCount: 5,
+            angle: 60,
+            spread: 55,
+            origin: { x: 0 },
+            colors: ['#59BE4C', '#ffffff', '#000000']
+          });
+          confetti({
+            particleCount: 5,
+            angle: 120,
+            spread: 55,
+            origin: { x: 1 },
+            colors: ['#59BE4C', '#ffffff', '#000000']
+          });
+
+          if (Date.now() < end) {
+            requestAnimationFrame(frame);
+          }
+        };
+        frame();
+
+        // Clear the timer
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+        }
+
+        // Show winner image for 5 seconds
+        setTimeout(() => {
+          setShowResult(false);
+        }, 5000);
       }
-    };
-    frame();
-
-    // Clear the timer
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
+    } catch (error) {
+      console.error('Error marking happened:', error);
+      if (error.response?.status === 400) {
+        // Someone else already won
+        setIsWinner(false);
+        setShowResult(true);
+        
+        // Show loser images
+        setResultImage('/donkey.webp');
+        setTimeout(() => {
+          setResultImage('/dogass.webp');
+          setTimeout(() => {
+            setShowResult(false);
+          }, 3000);
+        }, 3000);
+      }
     }
   };
 
@@ -186,6 +258,30 @@ function PredictionPage() {
   return (
     <div className="min-h-screen p-4 relative">
       <AnimatedBackground />
+      
+      {/* Winner/Loser Image Overlay */}
+      {showResult && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.5 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
+        >
+          <div className="text-center">
+            <img
+              src={resultImage}
+              alt={isWinner ? 'Winner' : 'Loser'}
+              className="max-w-md max-h-96 mx-auto mb-4 rounded-lg"
+            />
+            <h2 className={`text-4xl font-bold ${isWinner ? 'text-green-400' : 'text-red-400'}`}>
+              {isWinner ? '🎉 You Won! 🎉' : '😢 You Lost!'}
+            </h2>
+            {isWinner && (
+              <p className="text-white text-2xl mt-2">+10 Points!</p>
+            )}
+          </div>
+        </motion.div>
+      )}
+
       <div className="max-w-2xl mx-auto pt-10">
         <GlassCard>
           <div className="text-center mb-8">
@@ -199,10 +295,7 @@ function PredictionPage() {
             className="bg-white/10 border border-white/20 rounded-xl p-6 mb-8 backdrop-blur-sm"
           >
             <h2 className="text-xl font-bold text-center mb-2 text-white/80">Your Target:</h2>
-            <BlurText 
-              text={targetPlayer.name} 
-              className="text-4xl font-bold text-white text-center text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400"
-            />
+            <h1 className="text-4xl font-bold text-white text-center text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">{targetPlayer.name}</h1>
           </motion.div>
 
           {hasSubmitted ? (

@@ -6,9 +6,10 @@ import { FiUser, FiLogOut, FiUsers, FiArrowRight, FiPlus, FiLogIn } from 'react-
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import authService from '../utils/authService';
 import axiosInstance from '../utils/axiosInstance';
 
@@ -19,6 +20,17 @@ function LobbyPage() {
   const [name, setName] = useState('');
   const [roomCode, setRoomCode] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
+  const [selectedAvatar, setSelectedAvatar] = useState('avatar1.webp');
+
+  const avatars = [
+    'avatar1.webp',
+    'avatar2.webp',
+    'avatar3.webp',
+    'avatar4.webp',
+    'avatar5.webp',
+    'avatar6.png'
+  ];
 
   useEffect(() => {
     checkAuth();
@@ -28,8 +40,20 @@ function LobbyPage() {
   const checkAuth = async () => {
     setIsLoading(true);
     const user = await authService.autoLogin();
+    if (user) {
+      await fetchCurrentPlayer(user.id);
+    }
     setCurrentUser(user);
     setIsLoading(false);
+  };
+
+  const fetchCurrentPlayer = async (playerId) => {
+    try {
+      const response = await axiosInstance.get(`/players/${playerId}`);
+      setSelectedAvatar(response.data.avatar || 'avatar1.webp');
+    } catch (error) {
+      console.error('Error fetching player:', error);
+    }
   };
 
   const fetchAllPlayers = async () => {
@@ -90,6 +114,20 @@ function LobbyPage() {
       toast.success('Joined room successfully!');
     } catch (error) {
       toast.error('Room not found');
+    }
+  };
+
+  const handleSetAvatar = async (avatar) => {
+    if (!currentUser) return;
+    
+    try {
+      await axiosInstance.put(`/players/${currentUser.id}`, { avatar });
+      setSelectedAvatar(avatar);
+      setIsAvatarModalOpen(false);
+      toast.success('Avatar updated!');
+      fetchAllPlayers();
+    } catch (error) {
+      toast.error('Failed to update avatar');
     }
   };
 
@@ -199,11 +237,57 @@ function LobbyPage() {
                       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(255,255,255,0.1),transparent)]" />
                       <CardContent className="relative pt-6">
                         <div className="flex items-center gap-4">
-                          <Avatar className="h-16 w-16 border-2 border-white/20">
-                            <AvatarFallback className="bg-white/10 text-white text-xl">
-                              {currentUser.name.charAt(0).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
+                          <div className="flex flex-col items-center gap-2">
+                            <Avatar className="h-20 w-20 border-2 border-white/20">
+                              <AvatarImage src={`/${selectedAvatar}`} alt="Avatar" />
+                              <AvatarFallback className="bg-white/10 text-white text-xl">
+                                {currentUser.name.charAt(0).toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                            <Dialog open={isAvatarModalOpen} onOpenChange={setIsAvatarModalOpen}>
+                              <DialogTrigger asChild>
+                                <button className="text-xs text-white/60 hover:text-white transition-colors">
+                                  Set Avatar
+                                </button>
+                              </DialogTrigger>
+                              <DialogContent className="bg-black border-white/10">
+                                <DialogHeader>
+                                  <DialogTitle className="text-white">Choose Your Avatar</DialogTitle>
+                                  <DialogDescription className="text-white/60">
+                                    Select an avatar to personalize your profile
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <div className="grid grid-cols-3 gap-4 py-4">
+                                  {avatars.map((avatar) => (
+                                    <motion.button
+                                      key={avatar}
+                                      onClick={() => handleSetAvatar(avatar)}
+                                      whileHover={{ scale: 1.05 }}
+                                      whileTap={{ scale: 0.95 }}
+                                      className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all ${
+                                        selectedAvatar === avatar
+                                          ? 'border-primary shadow-lg shadow-primary/50'
+                                          : 'border-white/20 hover:border-white/40'
+                                      }`}
+                                    >
+                                      <img
+                                        src={`/${avatar}`}
+                                        alt={avatar}
+                                        className="w-full h-full object-cover"
+                                      />
+                                      {selectedAvatar === avatar && (
+                                        <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
+                                          <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center">
+                                            <span className="text-black text-xl">✓</span>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </motion.button>
+                                  ))}
+                                </div>
+                              </DialogContent>
+                            </Dialog>
+                          </div>
                           <div className="flex-1">
                             <h2 className="text-2xl font-bold">{currentUser.name}</h2>
                             <p className="text-white/60 text-sm">Ready to play</p>
@@ -296,6 +380,7 @@ function LobbyPage() {
                         >
                           <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-white/5 transition-colors">
                             <Avatar className="h-10 w-10 border border-white/10">
+                              <AvatarImage src={`/${player.avatar || 'avatar1.webp'}`} alt={player.name} />
                               <AvatarFallback className="bg-white/10 text-white">
                                 {player.name.charAt(0).toUpperCase()}
                               </AvatarFallback>
